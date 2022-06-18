@@ -1,0 +1,181 @@
+#! /usr/bin/env python3
+
+from pathlib import Path
+
+from subprocess import run
+
+from typing import List, Tuple
+import sys
+
+#root = Path(__file__).parent
+#test_path = root / 'test' / 'main'
+
+test_path = "."
+
+repo_root = Path(
+    run(["git", "-C", test_path, "rev-parse", "--show-toplevel"], capture_output=True).stdout.decode().strip())
+
+
+def find_submodules() -> List[Tuple[str, str]]:
+    result = []
+
+    config_raw = run(["git", "config", "--file", str(repo_root / ".gitmodules"), "--get-regexp", "path"],
+                     capture_output=True).stdout.decode()
+
+    for module in config_raw.split('\n'):
+        if not module:
+            continue
+        config_module, path = module.split(' ')
+        module_name = config_module.split('.')[1]
+        result.append((module_name, path))
+    return result
+
+
+def find_previous_revision(path: str, compare_commit: str) -> str:
+    # git ls-tree HEAD submodule1
+    # 160000 commit c2005918d53fa8d63af5d8ce059f3233969b35ea  submodule1
+    # NOTE tab before module name                           /\
+    raw = run(["git", "-C", str(repo_root), "ls-tree", compare_commit, path], capture_output=True).stdout.decode()
+
+    raw = raw[:raw.index('\t')]
+    return raw.strip().split(' ')[2]
+
+
+def find_staged_revision(path: str) -> str:
+    # git ls-files -s submodule1
+    # 160000 commit c2005918d53fa8d63af5d8ce059f3233969b35ea 0  submodule1
+
+    raw = run(['git', '-C', str(repo_root), 'ls-files', '-s', path], capture_output=True)
+    raw = raw.stdout.decode()
+
+    return raw.split(' ')[1]
+
+
+def find_submodule_staged_commits(path: str, compare_commit: str) -> List[str]:
+    head = find_previous_revision(path, compare_commit)
+    staged = find_staged_revision(path)
+
+    submodule_path = repo_root / path
+
+    raw = run(['git', '-C', submodule_path, 'log', '--pretty=%s', '-n', '15', f"{head}..{staged}"],
+              capture_output=True)
+    raw = raw.stdout.decode().strip()
+    return [i.strip() for i in raw.split('\n') if i]
+
+
+def format_submodule_staged_commits(module_name: str, module_path: str, compare_commit: str) -> List[str]:
+    new_commits = find_submodule_staged_commits(module_path, compare_commit)
+
+    if len(new_commits) == 0:
+        return []
+
+    if len(new_commits) > 12:
+        new_commits[12:] = ['... + more']
+
+    lines = [f"{module_name}:"]
+    for commit in new_commits:
+        lines.append(f"    {commit}")
+    lines.append("")
+
+    return lines
+
+
+def generate_changeset_description(compare_commit: str) -> str:
+    lines = []
+
+    for module_name, module_path in sorted(find_submodules(), key=lambda x: x[0]):
+        lines.extend(format_submodule_staged_commits(module_name, module_path, compare_commit))
+
+    return '\n'.join(lines)
+
+
+def inject_submodule_changeset(existing_changeset: str, compare_commit: str) -> str:
+    to_inject = generate_changeset_description(compare_commit)
+
+    has_changes = bool(to_inject)
+
+    entry_header = "Submodule changes:"
+    entry_footer = "End of submodule changes:"
+
+    already_has_entry = entry_header in existing_changeset and entry_footer in existing_changeset
+
+    to_insert = entry_header + "\n" + to_inject + "\n" + entry_footer
+
+    result = ""
+
+    # 4 cases
+    if not has_changes and not already_has_entry:
+        print("case0")
+        # ok!
+        result = existing_changeset
+
+    if not has_changes and already_has_entry:
+        print("case1")
+        # remove the changeset
+        result = existing_changeset[:existing_changeset.index(entry_header)] \
+                 + existing_changeset[existing_changeset.index(entry_footer) + len(entry_footer):]
+
+    if has_changes and not already_has_entry:
+        print("case2")
+        # insert at the end
+
+        # Add a newline if necessary
+        newlines = ""
+        if len(existing_changeset) > 1:
+            if existing_changeset[-1] != '\n':
+                newlines += '\n'
+            if existing_changeset[-2] != '\n':
+                newlines += '\n'
+
+        result = existing_changeset + newlines + to_insert
+
+    if has_changes and already_has_entry:
+        print("case3")
+        # replace entry
+
+        result = existing_changeset[:existing_changeset.index(entry_header)] \
+                 + to_insert + existing_changeset[existing_changeset.index(entry_footer) + len(entry_footer):]
+
+    if result[-1] != "\n":
+        result += "\n"
+
+    return result
+
+
+def apply_changes(filename: str, compare_commit: str):
+    import os
+    print(os.getcwd())
+
+    with open(filename, 'r') as f:
+        content = f.read()
+
+    with open(filename, 'w') as f:
+        f.write(inject_submodule_changeset(content, compare_commit))
+
+
+def figure_out_previous_source(argv) -> str:
+    if len(argv) < 3:
+        return "HEAD"
+
+    # This happens when --amend is provided
+    if argv[2] != "commit":
+        return "HEAD"
+
+    if len(argv) < 4:
+        # Should not happen but whatever
+        return "HEAD"
+
+    # The commit before amended commit
+    return f"{argv[3]}~1"
+
+
+if __name__ == '__main__':
+    if len(sys.argv) < 2:
+        print("Missing input file")
+        sys.exit(0)
+
+    print(sys.argv)
+
+    print("commit source", figure_out_previous_source(sys.argv))
+
+    apply_changes(sys.argv[1], figure_out_previous_source(sys.argv))
