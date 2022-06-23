@@ -57,7 +57,7 @@ def find_submodule_staged_commits(path: str, compare_commit: str) -> List[str]:
 
     submodule_path = repo_root / path
 
-    raw = run(['git', '-C', submodule_path, 'log', '--pretty=%s', '-n', '15', f"{head}..{staged}"],
+    raw = run(['git', '-C', submodule_path, 'log', '--pretty=oneline', '-n', '15', f"{head}..{staged}"],
               capture_output=True)
     raw = raw.stdout.decode().strip()
     return [i.strip() for i in raw.split('\n') if i]
@@ -105,18 +105,15 @@ def inject_submodule_changeset(existing_changeset: str, compare_commit: str) -> 
 
     # 4 cases
     if not has_changes and not already_has_entry:
-        print("case0")
         # ok!
         result = existing_changeset
 
     if not has_changes and already_has_entry:
-        print("case1")
         # remove the changeset
         result = existing_changeset[:existing_changeset.index(entry_header)] \
                  + existing_changeset[existing_changeset.index(entry_footer) + len(entry_footer):]
 
     if has_changes and not already_has_entry:
-        print("case2")
         # insert at the end
 
         # Add a newline if necessary
@@ -130,7 +127,6 @@ def inject_submodule_changeset(existing_changeset: str, compare_commit: str) -> 
         result = existing_changeset + newlines + to_insert
 
     if has_changes and already_has_entry:
-        print("case3")
         # replace entry
 
         result = existing_changeset[:existing_changeset.index(entry_header)] \
@@ -174,8 +170,6 @@ if __name__ == '__main__':
         print("Missing input file")
         sys.exit(0)
 
-    print(sys.argv)
+    commit_source = figure_out_previous_source(sys.argv)
 
-    print("commit source", figure_out_previous_source(sys.argv))
-
-    apply_changes(sys.argv[1], figure_out_previous_source(sys.argv))
+    apply_changes(sys.argv[1], commit_source)
