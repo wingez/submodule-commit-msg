@@ -1,7 +1,7 @@
 
 
-Git-hook which inserts a summary of changes in submodules in each commit message.
-For example inserts this into your commit messages:
+A Git-hook which when you commits changes in a submodule, automagically inserts a summary of these changes in the commit message.
+Let's say you make some new commits in submodule1 & submodule2. When you then commit those modules in the main repo, your commit msg will look like this
 ```
 My new commit
 
@@ -27,7 +27,6 @@ End of submodule changes:
 
 ```
 
-
 ## Installation
-Place download and place the file under `.git/hooks/prepare-commit-msg`
+Download and place the file under `.git/hooks/prepare-commit-msg`
 Make it executable: `chmod +x .git/hooks/prepare-commit-msg`
