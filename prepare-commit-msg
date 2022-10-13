@@ -1,5 +1,11 @@
 #! /usr/bin/env python3
 
+#
+# Copyright (c) Gustav le Dous
+#
+# WARNING: Use with caution. Partially made while drunk
+#
+
 from pathlib import Path
 
 from subprocess import run
