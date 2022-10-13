@@ -1,9 +1,9 @@
 
-
+# List Submodule Changes Commit Hook
 A Git-hook which when you commits changes in a submodule, automagically inserts a summary of these changes in the commit message.
 Let's say you make some new commits in submodule1 & submodule2. When you then commit those modules in the main repo, your commit msg will look like this
 ```
-My new commit
+Main repo commit
 
 Submodule changes:
 module1:
@@ -28,5 +28,16 @@ End of submodule changes:
 ```
 
 ## Installation
-Download and place the file under `.git/hooks/prepare-commit-msg`
-Make it executable: `chmod +x .git/hooks/prepare-commit-msg`
+Download `prepare-commit-msg` and place it in your repo's hooks folder `.git/hooks/prepare-commit-msg`
+Then make it executable: `chmod +x .git/hooks/prepare-commit-msg`
+
+## Configuration
+The script can be configured to by setting the following environment variables to integer values:
+
+| Environment variable | Default | Description |
+|----------------------|---------|-------------|
+| `SUBMODULE_HOOK_HASH_LENGTH` |  8  |   Include the first n letters of each submodule commit hash          |
+| `SUBMODULE_HOOK_MAX_COMMIT_SHOWN` |    12     |      Max amount of commits listed per submodule before truncating list       |
+
+ 
+
