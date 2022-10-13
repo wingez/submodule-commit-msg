@@ -6,17 +6,14 @@ from subprocess import run
 
 from typing import List, Tuple
 import sys
+import os
 
-COMMIT_HASH_LENGTH = 8
-MAX_COMMITS_PER_SUBMODULE = 12
+commit_hash_length = int(os.environ.get("SUBMODULE_HOOK_HASH_LENGTH", default=8))
 
-#root = Path(__file__).parent
-#test_path = root / 'test' / 'main'
-
-test_path = "."
+max_commits = int(os.environ.get("SUBMODULE_HOOK_MAX_COMMIT_SHOWN", default=12))
 
 repo_root = Path(
-    run(["git", "-C", test_path, "rev-parse", "--show-toplevel"], capture_output=True).stdout.decode().strip())
+    run(["git", "rev-parse", "--show-toplevel"], capture_output=True).stdout.decode().strip())
 
 
 def find_submodules() -> List[Tuple[str, str]]:
@@ -63,20 +60,19 @@ def find_submodule_staged_commits(path: str, compare_commit: str) -> List[str]:
     raw = run(['git', '-C', submodule_path, 'log', '--pretty=oneline', '-n', '15', f"{head}..{staged}"],
               capture_output=True)
     raw = raw.stdout.decode().strip()
-    
+
     lines = [i.strip() for i in raw.split('\n') if i]
-    
+
     # only use COMMIT_HASH_LENGTH chars for commit-hash
     result = []
     for line in lines:
         splitted = line.split(' ')
 
-        commit_hash = splitted[0][:COMMIT_HASH_LENGTH]
+        commit_hash = splitted[0][:commit_hash_length]
         commit_msg = ' '.join(splitted[1:])
         result.append(f'{commit_hash} {commit_msg}')
 
     return result
-    
 
 
 def format_submodule_staged_commits(module_name: str, module_path: str, compare_commit: str) -> List[str]:
@@ -85,8 +81,8 @@ def format_submodule_staged_commits(module_name: str, module_path: str, compare_
     if len(new_commits) == 0:
         return []
 
-    if len(new_commits) > MAX_COMMITS_PER_SUBMODULE:
-        new_commits[MAX_COMMITS_PER_SUBMODULE:] = ['... + more']
+    if len(new_commits) > max_commits:
+        new_commits[max_commits:] = ['... + more']
 
     lines = [f"{module_name}:"]
     for commit in new_commits:
