@@ -93,16 +93,16 @@ def format_submodule_staged_commits(module_name: str, module_path: str, compare_
     return result
 
 
-def generate_changeset_description(compare_commit: str) -> str:
+def generate_changeset_description(compare_commit: str) -> List[str]:
     lines = []
 
     for module_name, module_path in sorted(find_submodules(), key=lambda x: x[0]):
         lines.extend(format_submodule_staged_commits(module_name, module_path, compare_commit))
 
-    return '\n'.join(lines)
+    return lines
 
 
-def inject_submodule_changeset(existing_changeset: str, compare_commit: str) -> str:
+def inject_submodule_changeset(existing_changeset: List[str], compare_commit: str) -> List[str]:
     to_inject = generate_changeset_description(compare_commit)
 
     has_changes = bool(to_inject)
@@ -111,8 +111,12 @@ def inject_submodule_changeset(existing_changeset: str, compare_commit: str) -> 
     entry_footer = "End of submodule changes:"
 
     already_has_entry = entry_header in existing_changeset and entry_footer in existing_changeset
+    to_insert = [entry_header, *to_inject, entry_footer]
 
-    to_insert = entry_header + "\n" + to_inject + "\n" + entry_footer
+    header_index, footer_index = -1, -1
+    if already_has_entry:
+        header_index = existing_changeset.index(entry_header)
+        footer_index = existing_changeset.index(entry_footer)
 
     result = ""
 
@@ -123,30 +127,30 @@ def inject_submodule_changeset(existing_changeset: str, compare_commit: str) -> 
 
     if not has_changes and already_has_entry:
         # remove the changeset
-        result = existing_changeset[:existing_changeset.index(entry_header)] \
-                 + existing_changeset[existing_changeset.index(entry_footer) + len(entry_footer):]
+        result = existing_changeset[:header_index] + existing_changeset[footer_index + 1:]
 
     if has_changes and not already_has_entry:
         # insert at the end
 
         # Add a newline if necessary
-        newlines = ""
-        if len(existing_changeset) > 1:
-            if existing_changeset[-1] != '\n':
-                newlines += '\n'
-            if existing_changeset[-2] != '\n':
-                newlines += '\n'
+        newlines = []
+        if len(existing_changeset) >= 1:
+            if existing_changeset[-1]:
+                newlines.append("")
+                if len(existing_changeset) >= 2 and existing_changeset[-2]:
+                    newlines.append("")
 
         result = existing_changeset + newlines + to_insert
 
     if has_changes and already_has_entry:
         # replace entry
 
-        result = existing_changeset[:existing_changeset.index(entry_header)] \
-                 + to_insert + existing_changeset[existing_changeset.index(entry_footer) + len(entry_footer):]
+        result = existing_changeset[:header_index] \
+                 + to_insert + existing_changeset[footer_index + 1:]
 
-    if result[-1] != "\n":
-        result += "\n"
+    # add newline at the end
+    if result[-1]:
+        result.append("")
 
     return result
 
@@ -156,10 +160,10 @@ def apply_changes(filename: str, compare_commit: str):
     print(os.getcwd())
 
     with open(filename, 'r') as f:
-        content = f.read()
+        content = [line.strip() for line in f.readlines()]
 
     with open(filename, 'w') as f:
-        f.write(inject_submodule_changeset(content, compare_commit))
+        f.writelines(line + os.linesep for line in inject_submodule_changeset(content, compare_commit))
 
 
 def figure_out_previous_source(argv) -> str:
