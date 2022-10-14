@@ -48,6 +48,22 @@ def test_single_submodule_single_commit(tmp_path):
     ]
 
 
+def test_no_submodule_changes(tmp_path):
+    folders = DefaultFolders(tmp_path)
+
+    test_module = add_submodule_to_repo(folders.main_repo, folders.sub1, "testmodule")
+    commit(folders.main_repo, "add submodules", test_module)
+
+    empty_commit_in_folder(test_module, "empty commit")
+
+    install_hook(folders.main_repo)
+    commit(folders.main_repo, "new commit",allow_empty=True)
+
+    assert get_last_commit_message(folders.main_repo) == [
+        "new commit",
+    ]
+
+
 def test_multiple_submodules(tmp_path):
     folders = DefaultFolders(tmp_path)
 

@@ -46,7 +46,6 @@ def find_submodules(modules_path: Path) -> List[Submodule]:
     try:
         config_lines = do_git_command_multi_line("config", "--file", modules_path, "--get-regexp", "path")
     except CalledProcessError:
-        print("Submodule commit hook could not parse .gitmodules")
         return []
 
     result = []
@@ -87,7 +86,6 @@ def find_previous_revision(path: str, compare_commit: str) -> str:
     # 160000 commit c2005918d53fa8d63af5d8ce059f3233969b35ea  submodule1
     # NOTE tab before module name                           /\
     raw = do_git_command_single_line("-C", str(repo_root), "ls-tree", compare_commit, path)
-
     raw = raw[:raw.index('\t')]
     return raw.strip().split(' ')[2]
 
@@ -139,23 +137,24 @@ def generate_changeset_description(compare_commit: str) -> List[str]:
     chunks = []
     for added in added_modules:
         chunks.append([
-            added.name+':',
+            added.name + ':',
             "    Added"
         ])
 
     for removed in removed_modules:
         chunks.append([
-            removed.name+':',
+            removed.name + ':',
             "    Removed"
         ])
 
     for submodule in sorted(consistent_modules, key=lambda x: x.name):
-        chunks.append(format_submodule_staged_commits(submodule.name, submodule.name, compare_commit))
+        chunks.append(format_submodule_staged_commits(submodule.name, submodule.path, compare_commit))
 
     lines = []
     for chunk in chunks:
-        lines.extend(chunk)
-        lines.append("")
+        if chunk:
+            lines.extend(chunk)
+            lines.append("")
 
     return lines
 
@@ -175,8 +174,6 @@ def inject_submodule_changeset(existing_changeset: List[str], compare_commit: st
     if already_has_entry:
         header_index = existing_changeset.index(entry_header)
         footer_index = existing_changeset.index(entry_footer)
-
-    result = ""
 
     # 4 cases
     if not has_changes and not already_has_entry:
