@@ -159,7 +159,8 @@ def generate_changeset_description(compare_commit: str) -> List[str]:
     return lines
 
 
-def inject_submodule_changeset(existing_changeset: List[str], compare_commit: str) -> List[str]:
+def inject_submodule_changeset(existing_changeset: List[str], compare_commit: str, existing_trailers: List[str]) -> \
+        List[str]:
     to_inject = generate_changeset_description(compare_commit)
 
     has_changes = bool(to_inject)
@@ -185,17 +186,22 @@ def inject_submodule_changeset(existing_changeset: List[str], compare_commit: st
         result = existing_changeset[:header_index] + existing_changeset[footer_index + 1:]
 
     if has_changes and not already_has_entry:
-        # insert at the end
+        # insert at the end but before any trailers
 
-        # Add a newline if necessary
+        index_of_first_trailer = len(existing_changeset)
+        for index, line in enumerate(existing_changeset):
+            if line in existing_trailers:
+                index_of_first_trailer = index
+                break
+
         newlines = []
-        if len(existing_changeset) >= 1:
-            if existing_changeset[-1]:
+        if index_of_first_trailer - 1 >= 0:
+            if existing_changeset[index_of_first_trailer - 1]:
                 newlines.append("")
-                if len(existing_changeset) >= 2 and existing_changeset[-2]:
-                    newlines.append("")
 
-        result = existing_changeset + newlines + to_insert
+        result = existing_changeset.copy()
+
+        result[index_of_first_trailer:index_of_first_trailer] = newlines + to_insert
 
     if has_changes and already_has_entry:
         # replace entry
@@ -211,14 +217,14 @@ def inject_submodule_changeset(existing_changeset: List[str], compare_commit: st
 
 
 def apply_changes(filename: str, compare_commit: str):
-    import os
-    print(os.getcwd())
+    existing_trailers = do_git_command_multi_line("interpret-trailers", "--parse", filename)
 
     with open(filename, 'r') as f:
         content = [line.strip() for line in f.readlines()]
 
     with open(filename, 'w') as f:
-        f.writelines(line + os.linesep for line in inject_submodule_changeset(content, compare_commit))
+        f.writelines(
+            line + os.linesep for line in inject_submodule_changeset(content, compare_commit, existing_trailers))
 
 
 def figure_out_previous_source(argv) -> str:
