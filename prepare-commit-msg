@@ -64,40 +64,33 @@ def find_staged_revision(path: str) -> str:
     return raw.split(' ')[1]
 
 
-def find_submodule_staged_commits(path: str, compare_commit: str) -> List[str]:
-    head = find_previous_revision(path, compare_commit)
-    staged = find_staged_revision(path)
+def format_submodule_staged_commits(module_name: str, module_path: str, compare_commit: str) -> List[str]:
+    head = find_previous_revision(module_path, compare_commit)
+    staged = find_staged_revision(module_path)
 
-    raw = do_git_command_multi_line('-C', repo_root / path, 'log', '--pretty=oneline', '-n', '15', f"{head}..{staged}")
-    lines = [i.strip() for i in raw if i]
-
-    # only use COMMIT_HASH_LENGTH chars for commit-hash
-    result = []
-    for line in lines:
+    max_commits_to_extract = max_commits + 1
+    commits = do_git_command_multi_line('-C', repo_root / module_path, 'log', '--pretty=oneline', '-n',
+                                        max_commits_to_extract,
+                                        f"{head}..{staged}")
+    if not commits:
+        return []
+    result = [f"{module_name}:"]
+    for line in commits[:max_commits]:
         splitted = line.split(' ')
 
+        # only use specified length for commit-hash
         commit_hash = splitted[0][:commit_hash_length]
         commit_msg = ' '.join(splitted[1:])
-        result.append(f'{commit_hash} {commit_msg}')
+        result.append(f'    {commit_hash} {commit_msg}')
 
+    if len(commits) > max_commits:
+        # if truncated
+        total_commits = do_git_command_single_line('-C', repo_root / module_path, 'rev-list', '--count', f"{head}..{staged}")
+        not_shown_commits = int(total_commits) - max_commits
+        result.append(f'    ... +{not_shown_commits} more')
+
+    result.append("")
     return result
-
-
-def format_submodule_staged_commits(module_name: str, module_path: str, compare_commit: str) -> List[str]:
-    new_commits = find_submodule_staged_commits(module_path, compare_commit)
-
-    if len(new_commits) == 0:
-        return []
-
-    if len(new_commits) > max_commits:
-        new_commits[max_commits:] = ['... + more']
-
-    lines = [f"{module_name}:"]
-    for commit in new_commits:
-        lines.append(f"    {commit}")
-    lines.append("")
-
-    return lines
 
 
 def generate_changeset_description(compare_commit: str) -> str:

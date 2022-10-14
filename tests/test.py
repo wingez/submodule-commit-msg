@@ -93,7 +93,7 @@ def test_max_commits_shown(tmp_path):
         "first:",
         "     empty commit 9",
         "     empty commit 8",
-        "    ... + more",
+        "    ... +8 more",
         "",
         "End of submodule changes:",
     ]
