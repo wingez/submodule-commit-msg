@@ -225,6 +225,21 @@ def test_hook_amend(tmp_path):
     ]
 
 
+def test_do_nothing_in_repo_with_no_submodules(tmp_path):
+    folders = DefaultFolders(tmp_path)
+    install_hook(folders.main_repo)
+    commit(folders.main_repo, "hello world", allow_empty=True)
+
+    assert get_last_commit_message(folders.main_repo) == ["hello world"]
+
+    # Test so we can also handle empty gitmodules file
+    git_modules_file = folders.main_repo / ".gitmodules"
+    git_modules_file.touch()
+    commit(folders.main_repo, "hello world2", allow_empty=True)
+
+    assert get_last_commit_message(folders.main_repo) == ["hello world2"]
+
+
 class DefaultFolders:
     def __init__(self, tmp_path: Path):
         self.main_repo = tmp_path / 'main'

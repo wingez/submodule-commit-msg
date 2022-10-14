@@ -8,7 +8,7 @@
 
 from pathlib import Path
 
-from subprocess import run
+from subprocess import run, CalledProcessError
 
 from typing import List, Tuple
 import sys
@@ -34,9 +34,17 @@ repo_root = Path(do_git_command_single_line("rev-parse", "--show-toplevel"))
 
 
 def find_submodules() -> List[Tuple[str, str]]:
-    result = []
-    config_lines = do_git_command_multi_line("config", "--file", repo_root / ".gitmodules", "--get-regexp", "path")
+    git_modules_file = repo_root / ".gitmodules"
+    if not git_modules_file.exists():
+        return []
 
+    try:
+        config_lines = do_git_command_multi_line("config", "--file", git_modules_file, "--get-regexp", "path")
+    except CalledProcessError:
+        print("Submodule commit hook could not parse .gitmodules")
+        return []
+
+    result = []
     for module in config_lines:
         if not module:
             continue
