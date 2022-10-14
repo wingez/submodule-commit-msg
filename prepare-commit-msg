@@ -5,11 +5,10 @@
 #
 # WARNING: Use with caution. Partially made while drunk
 #
-
+from dataclasses import dataclass
 from pathlib import Path
 
 from subprocess import run, CalledProcessError
-
 from typing import List, Tuple
 import sys
 import os
@@ -19,7 +18,11 @@ max_commits = int(os.environ.get("SUBMODULE_HOOK_MAX_COMMIT_SHOWN", default=12))
 
 
 def do_git_command_single_line(*args) -> str:
-    return do_git_command_multi_line(*args)[0]
+    lines = do_git_command_multi_line(*args)
+    if len(lines) > 0:
+        return lines[0]
+    else:
+        return ""
 
 
 def do_git_command_multi_line(*args) -> List[str]:
@@ -33,13 +36,15 @@ def do_git_command_multi_line(*args) -> List[str]:
 repo_root = Path(do_git_command_single_line("rev-parse", "--show-toplevel"))
 
 
-def find_submodules() -> List[Tuple[str, str]]:
-    git_modules_file = repo_root / ".gitmodules"
-    if not git_modules_file.exists():
-        return []
+@dataclass(frozen=True)
+class Submodule:
+    name: str
+    path: str
 
+
+def find_submodules(modules_path: Path) -> List[Submodule]:
     try:
-        config_lines = do_git_command_multi_line("config", "--file", git_modules_file, "--get-regexp", "path")
+        config_lines = do_git_command_multi_line("config", "--file", modules_path, "--get-regexp", "path")
     except CalledProcessError:
         print("Submodule commit hook could not parse .gitmodules")
         return []
@@ -50,8 +55,31 @@ def find_submodules() -> List[Tuple[str, str]]:
             continue
         config_module, path = module.split(' ')
         module_name = config_module.split('.')[1]
-        result.append((module_name, path))
+        result.append(Submodule(module_name, path))
     return result
+
+
+def find_previous_and_current_submodules() -> Tuple[List[Submodule], List[Submodule]]:
+    tmp_file = repo_root / "submodule_cmd_hook_tmp"
+    try:
+        with open(tmp_file, mode="wb+") as write_me:
+            result = run(["git", "-C", str(repo_root), "show", ":.gitmodules", "--", ], stdout=write_me)
+        if result.returncode == 0:
+            current_modules = find_submodules(tmp_file)
+        else:
+            current_modules = []
+
+        with open(tmp_file, mode="wb+") as write_me:
+            result = run(["git", "-C", str(repo_root), "show", "HEAD:.gitmodules", ], stdout=write_me)
+        if result.returncode == 0:
+            previous_modules = find_submodules(tmp_file)
+        else:
+            previous_modules = []
+
+    finally:
+        tmp_file.unlink(missing_ok=True)
+
+    return previous_modules, current_modules
 
 
 def find_previous_revision(path: str, compare_commit: str) -> str:
@@ -93,19 +121,41 @@ def format_submodule_staged_commits(module_name: str, module_path: str, compare_
 
     if len(commits) > max_commits:
         # if truncated
-        total_commits = do_git_command_single_line('-C', repo_root / module_path, 'rev-list', '--count', f"{head}..{staged}")
+        total_commits = do_git_command_single_line('-C', repo_root / module_path, 'rev-list', '--count',
+                                                   f"{head}..{staged}")
         not_shown_commits = int(total_commits) - max_commits
         result.append(f'    ... +{not_shown_commits} more')
 
-    result.append("")
     return result
 
 
 def generate_changeset_description(compare_commit: str) -> List[str]:
-    lines = []
+    previous_modules, current_modules = find_previous_and_current_submodules()
 
-    for module_name, module_path in sorted(find_submodules(), key=lambda x: x[0]):
-        lines.extend(format_submodule_staged_commits(module_name, module_path, compare_commit))
+    added_modules = set(current_modules).difference(set(previous_modules))
+    removed_modules = set(previous_modules).difference(set(current_modules))
+    consistent_modules = set(previous_modules).intersection(set(current_modules))
+
+    chunks = []
+    for added in added_modules:
+        chunks.append([
+            added.name+':',
+            "    Added"
+        ])
+
+    for removed in removed_modules:
+        chunks.append([
+            removed.name+':',
+            "    Removed"
+        ])
+
+    for submodule in sorted(consistent_modules, key=lambda x: x.name):
+        chunks.append(format_submodule_staged_commits(submodule.name, submodule.name, compare_commit))
+
+    lines = []
+    for chunk in chunks:
+        lines.extend(chunk)
+        lines.append("")
 
     return lines
 

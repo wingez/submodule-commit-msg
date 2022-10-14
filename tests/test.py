@@ -1,3 +1,4 @@
+import sys
 from pathlib import Path
 from subprocess import run
 
@@ -238,6 +239,46 @@ def test_do_nothing_in_repo_with_no_submodules(tmp_path):
     commit(folders.main_repo, "hello world2", allow_empty=True)
 
     assert get_last_commit_message(folders.main_repo) == ["hello world2"]
+
+
+def test_new_module_added(tmp_path):
+    folders = DefaultFolders(tmp_path)
+    install_hook(folders.main_repo)
+    empty_commit_in_folder(folders.main_repo, "hej")
+
+    test_module1 = add_submodule_to_repo(folders.main_repo, folders.sub1, "first")
+    commit(folders.main_repo, "add submodule", test_module1)
+
+    assert get_last_commit_message(folders.main_repo) == [
+        'add submodule',
+        '',
+        'Submodule changes:',
+        'first:',
+        '    Added',
+        '',
+        'End of submodule changes:',
+    ]
+
+
+def test_new_module_removed(tmp_path):
+    folders = DefaultFolders(tmp_path)
+    install_hook(folders.main_repo)
+    empty_commit_in_folder(folders.main_repo, "hej")
+    test_module1 = add_submodule_to_repo(folders.main_repo, folders.sub1, "first")
+    commit(folders.main_repo, "add submodule", test_module1)
+
+    do_git_command(folders.main_repo, "rm", test_module1)
+    commit(folders.main_repo, "removed submodule")
+
+    assert get_last_commit_message(folders.main_repo) == [
+        'removed submodule',
+        '',
+        'Submodule changes:',
+        'first:',
+        '    Removed',
+        '',
+        'End of submodule changes:',
+    ]
 
 
 class DefaultFolders:
