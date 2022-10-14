@@ -15,20 +15,29 @@ import sys
 import os
 
 commit_hash_length = int(os.environ.get("SUBMODULE_HOOK_HASH_LENGTH", default=8))
-
 max_commits = int(os.environ.get("SUBMODULE_HOOK_MAX_COMMIT_SHOWN", default=12))
 
-repo_root = Path(
-    run(["git", "rev-parse", "--show-toplevel"], capture_output=True).stdout.decode().strip())
+
+def do_git_command_single_line(*args) -> str:
+    return do_git_command_multi_line(*args)[0]
+
+
+def do_git_command_multi_line(*args) -> List[str]:
+    process_result = run(["git"] + [str(arg) for arg in args], capture_output=True)
+    process_result.check_returncode()
+    raw_output = process_result.stdout.decode()
+    result = [i.strip() for i in raw_output.splitlines()]
+    return result
+
+
+repo_root = Path(do_git_command_single_line("rev-parse", "--show-toplevel"))
 
 
 def find_submodules() -> List[Tuple[str, str]]:
     result = []
+    config_lines = do_git_command_multi_line("config", "--file", repo_root / ".gitmodules", "--get-regexp", "path")
 
-    config_raw = run(["git", "config", "--file", str(repo_root / ".gitmodules"), "--get-regexp", "path"],
-                     capture_output=True).stdout.decode()
-
-    for module in config_raw.split('\n'):
+    for module in config_lines:
         if not module:
             continue
         config_module, path = module.split(' ')
@@ -41,7 +50,7 @@ def find_previous_revision(path: str, compare_commit: str) -> str:
     # git ls-tree HEAD submodule1
     # 160000 commit c2005918d53fa8d63af5d8ce059f3233969b35ea  submodule1
     # NOTE tab before module name                           /\
-    raw = run(["git", "-C", str(repo_root), "ls-tree", compare_commit, path], capture_output=True).stdout.decode()
+    raw = do_git_command_single_line("-C", str(repo_root), "ls-tree", compare_commit, path)
 
     raw = raw[:raw.index('\t')]
     return raw.strip().split(' ')[2]
@@ -51,9 +60,7 @@ def find_staged_revision(path: str) -> str:
     # git ls-files -s submodule1
     # 160000 commit c2005918d53fa8d63af5d8ce059f3233969b35ea 0  submodule1
 
-    raw = run(['git', '-C', str(repo_root), 'ls-files', '-s', path], capture_output=True)
-    raw = raw.stdout.decode()
-
+    raw = do_git_command_single_line('-C', str(repo_root), 'ls-files', '-s', path)
     return raw.split(' ')[1]
 
 
@@ -61,13 +68,8 @@ def find_submodule_staged_commits(path: str, compare_commit: str) -> List[str]:
     head = find_previous_revision(path, compare_commit)
     staged = find_staged_revision(path)
 
-    submodule_path = repo_root / path
-
-    raw = run(['git', '-C', submodule_path, 'log', '--pretty=oneline', '-n', '15', f"{head}..{staged}"],
-              capture_output=True)
-    raw = raw.stdout.decode().strip()
-
-    lines = [i.strip() for i in raw.split('\n') if i]
+    raw = do_git_command_multi_line('-C', repo_root / path, 'log', '--pretty=oneline', '-n', '15', f"{head}..{staged}")
+    lines = [i.strip() for i in raw if i]
 
     # only use COMMIT_HASH_LENGTH chars for commit-hash
     result = []
