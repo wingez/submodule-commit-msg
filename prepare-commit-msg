@@ -201,7 +201,7 @@ def inject_submodule_changeset(existing_changeset: List[str], compare_commit: st
 
         result = existing_changeset.copy()
 
-        result[index_of_first_trailer:index_of_first_trailer] = newlines + to_insert
+        result[index_of_first_trailer:index_of_first_trailer] = newlines + to_insert + [""]
 
     if has_changes and already_has_entry:
         # replace entry

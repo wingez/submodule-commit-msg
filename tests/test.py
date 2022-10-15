@@ -1,9 +1,10 @@
+import os
 import sys
 from pathlib import Path
 from subprocess import run
 
 import shutil
-from typing import Union, List, Dict
+from typing import Union, List, Dict, Optional
 
 commit_hash_length = "SUBMODULE_HOOK_HASH_LENGTH"
 max_commits = "SUBMODULE_HOOK_MAX_COMMIT_SHOWN"
@@ -57,7 +58,7 @@ def test_no_submodule_changes(tmp_path):
     empty_commit_in_folder(test_module, "empty commit")
 
     install_hook(folders.main_repo)
-    commit(folders.main_repo, "new commit",allow_empty=True)
+    commit(folders.main_repo, "new commit", allow_empty=True)
 
     assert get_last_commit_message(folders.main_repo) == [
         "new commit",
@@ -297,6 +298,51 @@ def test_new_module_removed(tmp_path):
     ]
 
 
+def test_insert_message_after_trailers(tmp_path):
+    folders = DefaultFolders(tmp_path)
+
+    test_module1 = add_submodule_to_repo(folders.main_repo, folders.sub1, "first")
+    commit(folders.main_repo, "add submodules", test_module1)
+
+    install_hook(folders.main_repo)
+    msg_file = folders.main_repo / "commit_msg"
+    original_commit_msg = [
+        "some random commit",
+        "",
+        "this is not a trailer",
+        "",
+        "this: isonehowever",
+        "thisisoneas: well",
+    ]
+    msg_file.write_text(os.linesep.join(original_commit_msg))
+
+    assert do_git_command(folders.main_repo, "interpret-trailers", "--parse", msg_file) == [
+        "this: isonehowever",
+        "thisisoneas: well",
+    ]
+
+    commit(folders.main_repo, '', allow_empty=True, commit_msg_file=msg_file)
+    assert get_last_commit_message(folders.main_repo) == original_commit_msg
+
+    empty_commit_in_folder(test_module1, f"commit 1")
+    commit(folders.main_repo, "ignore", test_module1, amend=True, config={commit_hash_length: 0})
+
+    assert get_last_commit_message(folders.main_repo) == [
+        "some random commit",
+        "",
+        "this is not a trailer",
+        "",
+        "Submodule changes:",
+        "first:",
+        "     commit 1",
+        "",
+        "End of submodule changes:",
+        "",
+        "this: isonehowever",
+        "thisisoneas: well",
+    ]
+
+
 class DefaultFolders:
     def __init__(self, tmp_path: Path):
         self.main_repo = tmp_path / 'main'
@@ -347,15 +393,18 @@ def commit_amend(repo: Path):
     do_git_command(repo, *args)
 
 
-def commit(repo: Path, commit_msg: str, *to_stage: Path, amend: bool = False, allow_empty: bool = False, config={}):
+def commit(repo: Path, commit_msg: str, *to_stage: Path, commit_msg_file: Optional[Path] = None, amend: bool = False,
+           allow_empty: bool = False, config={}):
     stage_files(repo, *to_stage)
 
     args = ['commit', ]
 
-    if not amend:
-        args.extend(['-m', commit_msg])
-    else:
+    if amend:
         args.extend(['--amend', '--no-edit'])
+    elif commit_msg_file is not None:
+        args.extend(["--file", commit_msg_file])
+    else:
+        args.extend(['-m', commit_msg])
 
     if allow_empty:
         args.append('--allow-empty')
