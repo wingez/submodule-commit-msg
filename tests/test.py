@@ -356,8 +356,9 @@ class DefaultFolders:
 
 def install_hook(repo: Path):
     hooks_dir = repo / '.git' / 'hooks'
+    hook_path = Path(__file__).parent.parent / 'prepare-commit-msg'
 
-    shutil.copy("prepare-commit-msg", hooks_dir)
+    shutil.copy(hook_path, hooks_dir)
     do_command('chmod', '+x', hooks_dir / 'prepare-commit-msg', config={})
 
 
