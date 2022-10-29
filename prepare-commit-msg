@@ -126,9 +126,9 @@ def format_submodule_staged_commits(module_name: str, module_path: str, compare_
 
     if not commits:
         # Regression...
-        regression_to = do_git_command_single_line('-C', repo_root / module_path, 'log', '-n', '1', '--format=%s',
+        downgrade_to = do_git_command_single_line('-C', repo_root / module_path, 'log', '-n', '1', '--format=%s',
                                                    staged)
-        result.append(f"    Regression to: {staged[:commit_hash_length]} {regression_to}")
+        result.append(f"    Downgrade to: {staged[:commit_hash_length]} {downgrade_to}")
 
     for line in commits[:max_commits]:
         splitted = line.split(' ')

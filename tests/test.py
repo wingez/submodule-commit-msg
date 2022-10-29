@@ -343,7 +343,7 @@ def test_insert_message_after_trailers(tmp_path):
     ]
 
 
-def test_regression(tmp_path):
+def test_downgrade(tmp_path):
     folders = DefaultFolders(tmp_path)
     install_hook(folders.main_repo)
     empty_commit_in_folder(folders.main_repo, "hej")
@@ -364,14 +364,14 @@ def test_regression(tmp_path):
 
     do_git_command(test_module1, "checkout", chosen[0])
 
-    commit(folders.main_repo, "regression commit", test_module1, config={commit_hash_length: hash_length})
+    commit(folders.main_repo, "downgrade commit", test_module1, config={commit_hash_length: hash_length})
 
     assert get_last_commit_message(folders.main_repo) == [
-        'regression commit',
+        'downgrade commit',
         '',
         'Submodule changes:',
         'first:',
-        f'    Regression to: {chosen[0]} {chosen[1]}',
+        f'    Downgrade to: {chosen[0]} {chosen[1]}',
         '',
         'End of submodule changes:',
     ]
