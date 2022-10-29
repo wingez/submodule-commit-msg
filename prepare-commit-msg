@@ -58,9 +58,12 @@ def find_submodules(modules_path: Path) -> List[Submodule]:
     return result
 
 
-def find_previous_and_current_submodules() -> Tuple[List[Submodule], List[Submodule]]:
+def find_previous_and_current_submodules(compare_commit: str) -> Tuple[List[Submodule], List[Submodule]]:
+    # This detect added/removed submodules.
+
     tmp_file = repo_root / "submodule_cmd_hook_tmp"
     try:
+        # staged modules
         with open(tmp_file, mode="wb+") as write_me:
             result = run(["git", "-C", str(repo_root), "show", ":.gitmodules", "--", ], stdout=write_me)
         if result.returncode == 0:
@@ -68,8 +71,9 @@ def find_previous_and_current_submodules() -> Tuple[List[Submodule], List[Submod
         else:
             current_modules = []
 
+        # submodules found in last commit
         with open(tmp_file, mode="wb+") as write_me:
-            result = run(["git", "-C", str(repo_root), "show", "HEAD:.gitmodules", ], stdout=write_me)
+            result = run(["git", "-C", str(repo_root), "show", f"{compare_commit}:.gitmodules", ], stdout=write_me)
         if result.returncode == 0:
             previous_modules = find_submodules(tmp_file)
         else:
@@ -82,6 +86,7 @@ def find_previous_and_current_submodules() -> Tuple[List[Submodule], List[Submod
 
 
 def find_previous_revision(path: str, compare_commit: str) -> str:
+    # Revision of submodule which is stored in the specified commit
     # git ls-tree HEAD submodule1
     # 160000 commit c2005918d53fa8d63af5d8ce059f3233969b35ea  submodule1
     # NOTE tab before module name                           /\
@@ -91,6 +96,7 @@ def find_previous_revision(path: str, compare_commit: str) -> str:
 
 
 def find_staged_revision(path: str) -> str:
+    # Revision of submodule which is currently staged
     # git ls-files -s submodule1
     # 160000 commit c2005918d53fa8d63af5d8ce059f3233969b35ea 0  submodule1
 
@@ -128,7 +134,7 @@ def format_submodule_staged_commits(module_name: str, module_path: str, compare_
 
 
 def generate_changeset_description(compare_commit: str) -> List[str]:
-    previous_modules, current_modules = find_previous_and_current_submodules()
+    previous_modules, current_modules = find_previous_and_current_submodules(compare_commit)
 
     added_modules = set(current_modules).difference(set(previous_modules))
     removed_modules = set(previous_modules).difference(set(current_modules))
