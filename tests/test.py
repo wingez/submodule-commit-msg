@@ -343,6 +343,40 @@ def test_insert_message_after_trailers(tmp_path):
     ]
 
 
+def test_regression(tmp_path):
+    folders = DefaultFolders(tmp_path)
+    install_hook(folders.main_repo)
+    empty_commit_in_folder(folders.main_repo, "hej")
+    test_module1 = add_submodule_to_repo(folders.main_repo, folders.sub1, "first")
+
+    hash_length = 6
+
+    submodule_commits = []
+    for i in range(10):
+        msg = f"commit {i}"
+        empty_commit_in_folder(test_module1, msg)
+        commit_hash = do_git_command(test_module1, 'rev-parse', 'HEAD')[0][:hash_length]
+        submodule_commits.append((commit_hash, msg))
+
+    commit(folders.main_repo, "add submodule", test_module1)
+
+    chosen = submodule_commits[5]
+
+    do_git_command(test_module1, "checkout", chosen[0])
+
+    commit(folders.main_repo, "regression commit", test_module1, config={commit_hash_length: hash_length})
+
+    assert get_last_commit_message(folders.main_repo) == [
+        'regression commit',
+        '',
+        'Submodule changes:',
+        'first:',
+        f'    Regression to: {chosen[0]} {chosen[1]}',
+        '',
+        'End of submodule changes:',
+    ]
+
+
 class DefaultFolders:
     def __init__(self, tmp_path: Path):
         self.main_repo = tmp_path / 'main'

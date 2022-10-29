@@ -107,14 +107,29 @@ def find_staged_revision(path: str) -> str:
 def format_submodule_staged_commits(module_name: str, module_path: str, compare_commit: str) -> List[str]:
     head = find_previous_revision(module_path, compare_commit)
     staged = find_staged_revision(module_path)
+    """
+    There are three cases.
+     - if head==staged no changes
+     - elif (git log head..staged contains commits) -> submodule advanced forwards
+     - else -> submodule regressed 
+    """
+
+    if head == staged:
+        return []
 
     max_commits_to_extract = max_commits + 1
     commits = do_git_command_multi_line('-C', repo_root / module_path, 'log', '--pretty=oneline', '-n',
                                         max_commits_to_extract,
                                         f"{head}..{staged}")
-    if not commits:
-        return []
+
     result = [f"{module_name}:"]
+
+    if not commits:
+        # Regression...
+        regression_to = do_git_command_single_line('-C', repo_root / module_path, 'log', '-n', '1', '--format=%s',
+                                                   staged)
+        result.append(f"    Regression to: {staged[:commit_hash_length]} {regression_to}")
+
     for line in commits[:max_commits]:
         splitted = line.split(' ')
 
