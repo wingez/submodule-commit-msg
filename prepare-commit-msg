@@ -250,22 +250,6 @@ def apply_changes(filename: str, compare_commit: str):
             line + os.linesep for line in inject_submodule_changeset(content, compare_commit, existing_trailers))
 
 
-def figure_out_previous_source(argv) -> str:
-    if len(argv) < 3:
-        return "HEAD"
-
-    # This happens when --amend is provided
-    if argv[2] != "commit":
-        return "HEAD"
-
-    if len(argv) < 4:
-        # Should not happen but whatever
-        return "HEAD"
-
-    # The commit before amended commit
-    return f"{argv[3]}~1"
-
-
 def fail(message: str):
     if is_debug:
         raise ValueError(message)
