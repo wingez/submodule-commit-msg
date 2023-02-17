@@ -419,7 +419,10 @@ def stage_files(repo: Path, *to_stage: Path):
 
 
 def add_submodule_to_repo(repo: Path, submodule_path: Path, name: str) -> Path:
-    run(['git', '-C', repo, 'submodule', 'add', '--branch', 'master', submodule_path, name]).check_returncode()
+    # https://bugs.launchpad.net/ubuntu/+source/git/+bug/1993586/comments/5
+    # git dont like adding local submodules anymore. Hence the need to modify config fore this
+
+    run(['git', '-C', repo, '-c', 'protocol.file.allow=always', 'submodule', 'add', '--branch', 'master', submodule_path, name]).check_returncode()
     return repo / name
 
 
