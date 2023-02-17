@@ -42,6 +42,7 @@ The script can be configured to by setting the following environment variables t
 |----------------------|---------|-------------|
 | `SUBMODULE_HOOK_HASH_LENGTH` |  8  |   Include the first n letters of each submodule commit hash          |
 | `SUBMODULE_HOOK_MAX_COMMIT_SHOWN` |    12     |      Max amount of commits listed per submodule before truncating list       |
+| `SUBMODULE_HOOK_DEBUG` |         |      Set to give more detailed error-information        |
 
  
 
