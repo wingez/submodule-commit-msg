@@ -27,13 +27,19 @@ End of submodule changes:
 
 ```
 
-## Installation
+## Install for a single repository
 Download `prepare-commit-msg` and place it in your repo's hooks folder `.git/hooks/prepare-commit-msg`
 Then make it executable: `chmod +x .git/hooks/prepare-commit-msg`
 
 Or you can run the following from the root folder in your repo:
 
 `curl -O --output-dir .git/hooks/ https://raw.githubusercontent.com/wingez/submodule-commit-msg/main/prepare-commit-msg && chmod +x .git/hooks/prepare-commit-msg`
+
+## Install for all repositories
+Download `prepare-commit-msg` to any folder. For example `~/githooks/`
+Then make it executable: `chmod +x `~/githooks/*`
+
+Then execute the following to make git looks for hooks in that folder. Note that all local hooks in repositories will no longer work. All hooks needs to be in this folder. `git config --global core.hooksPath ~/githooks/`
 
 ## Configuration
 The script can be configured to by setting the following environment variables to integer values:
