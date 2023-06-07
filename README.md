@@ -37,7 +37,7 @@ Or you can run the following from the root folder in your repo:
 
 ## Install for all repositories
 Download `prepare-commit-msg` to any folder. For example `~/githooks/`
-Then make it executable: `chmod +x `~/githooks/*`
+Then make it executable: `chmod +x ~/githooks/*`
 
 Then execute the following to make git looks for hooks in that folder. Note that all local hooks in repositories will no longer work. All hooks needs to be in this folder. `git config --global core.hooksPath ~/githooks/`
 
