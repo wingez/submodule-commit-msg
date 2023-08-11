@@ -6,8 +6,12 @@ from subprocess import run
 import shutil
 from typing import Union, List, Dict, Optional
 
-commit_hash_length = "SUBMODULE_HOOK_HASH_LENGTH"
-max_commits = "SUBMODULE_HOOK_MAX_COMMIT_SHOWN"
+import pytest
+
+CONFIG_HASH_LENGTH = "hooks.submodule-commit-msg.hash-length"
+CONFIG_MAX_COMMITS_LISTED = "hooks.submodule-commit-msg.max-commits-listed"
+CONFIG_ENABLED = "hooks.submodule-commit-msg.enabled"
+CONFIG_DEBUG = "hooks.submodule-commit-msg.debug"
 
 
 def test_main(tmp_path: Path):
@@ -36,7 +40,7 @@ def test_single_submodule_single_commit(tmp_path):
     empty_commit_in_folder(test_module, "empty commit")
 
     install_hook(folders.main_repo)
-    commit(folders.main_repo, "new commit", test_module, config={commit_hash_length: 0})
+    commit(folders.main_repo, "new commit", test_module, config={CONFIG_HASH_LENGTH: 0})
 
     assert get_last_commit_message(folders.main_repo) == [
         "new commit",
@@ -76,7 +80,7 @@ def test_multiple_submodules(tmp_path):
     empty_commit_in_folder(test_module2, "another empty commit")
 
     install_hook(folders.main_repo)
-    commit(folders.main_repo, "hello world", test_module1, test_module2, config={commit_hash_length: 0})
+    commit(folders.main_repo, "hello world", test_module1, test_module2, config={CONFIG_HASH_LENGTH: 0})
 
     assert get_last_commit_message(folders.main_repo) == [
         "hello world",
@@ -102,7 +106,7 @@ def test_max_commits_shown(tmp_path):
         empty_commit_in_folder(test_module1, f"empty commit {i}")
 
     install_hook(folders.main_repo)
-    commit(folders.main_repo, "hello world", test_module1, config={max_commits: 2, commit_hash_length: 0})
+    commit(folders.main_repo, "hello world", test_module1, config={CONFIG_MAX_COMMITS_LISTED: 2, CONFIG_HASH_LENGTH: 0})
 
     assert get_last_commit_message(folders.main_repo) == [
         "hello world",
@@ -128,7 +132,7 @@ def test_commit_hash(tmp_path):
     commit_hash = do_git_command(test_module1, 'rev-parse', 'HEAD')[0][:commit_size]
 
     install_hook(folders.main_repo)
-    commit(folders.main_repo, "hello world", test_module1, config={commit_hash_length: commit_size})
+    commit(folders.main_repo, "hello world", test_module1, config={CONFIG_HASH_LENGTH: commit_size})
 
     assert get_last_commit_message(folders.main_repo) == [
         "hello world",
@@ -152,7 +156,7 @@ def test_comparison_commit_source(tmp_path):
     empty_commit_in_folder(test_module1, "commit 2")
 
     install_hook(folders.main_repo)
-    commit(folders.main_repo, "amend me", test_module1, amend=True, config={commit_hash_length: 0})
+    commit(folders.main_repo, "amend me", test_module1, amend=True, config={CONFIG_HASH_LENGTH: 0})
 
     assert get_last_commit_message(folders.main_repo) == [
         "amend me",
@@ -174,7 +178,7 @@ def test_replace_commit_msg(tmp_path):
     empty_commit_in_folder(test_module1, f"commit 1")
 
     install_hook(folders.main_repo)
-    commit(folders.main_repo, "amend me", test_module1, config={commit_hash_length: 0})
+    commit(folders.main_repo, "amend me", test_module1, config={CONFIG_HASH_LENGTH: 0})
 
     assert get_last_commit_message(folders.main_repo) == [
         "amend me",
@@ -187,7 +191,7 @@ def test_replace_commit_msg(tmp_path):
     ]
 
     empty_commit_in_folder(test_module1, "commit 2")
-    commit(folders.main_repo, "ignore", test_module1, amend=True, config={commit_hash_length: 0})
+    commit(folders.main_repo, "ignore", test_module1, amend=True, config={CONFIG_HASH_LENGTH: 0})
 
     assert get_last_commit_message(folders.main_repo) == [
         "amend me",
@@ -325,7 +329,7 @@ def test_insert_message_after_trailers(tmp_path):
     assert get_last_commit_message(folders.main_repo) == original_commit_msg
 
     empty_commit_in_folder(test_module1, f"commit 1")
-    commit(folders.main_repo, "ignore", test_module1, amend=True, config={commit_hash_length: 0})
+    commit(folders.main_repo, "ignore", test_module1, amend=True, config={CONFIG_HASH_LENGTH: 0})
 
     assert get_last_commit_message(folders.main_repo) == [
         "some random commit",
@@ -364,7 +368,7 @@ def test_downgrade(tmp_path):
 
     do_git_command(test_module1, "checkout", chosen[0])
 
-    commit(folders.main_repo, "downgrade commit", test_module1, config={commit_hash_length: hash_length})
+    commit(folders.main_repo, "downgrade commit", test_module1, config={CONFIG_HASH_LENGTH: hash_length})
 
     assert get_last_commit_message(folders.main_repo) == [
         'downgrade commit',
@@ -376,6 +380,47 @@ def test_downgrade(tmp_path):
         'End of submodule changes:',
     ]
 
+
+@pytest.mark.parametrize("config,enabled_expected", [
+    ({}, True),
+    ({CONFIG_ENABLED: "true"}, True),
+    ({CONFIG_ENABLED: "false"}, False),
+    ({CONFIG_ENABLED: "True"}, True),
+    ({CONFIG_ENABLED: "False"}, False),
+])
+def test_enabled(tmp_path, config: Dict[str, str], enabled_expected: bool):
+    # Test
+    folders = DefaultFolders(tmp_path)
+
+    test_module = add_submodule_to_repo(folders.main_repo, folders.sub1, "testmodule")
+    commit(folders.main_repo, "add submodules", test_module)
+
+    empty_commit_in_folder(test_module, "empty commit")
+
+    install_hook(folders.main_repo)
+    config[CONFIG_HASH_LENGTH] = "0"
+    commit(folders.main_repo, "new commit", test_module, config=config)
+
+    if enabled_expected:
+        expected = [
+            "new commit",
+            "",
+            "Submodule changes:",
+            "testmodule:",
+            "     empty commit",
+            "",
+            "End of submodule changes:",
+        ]
+    else:
+        expected = [
+            "new commit",
+        ]
+
+    assert get_last_commit_message(folders.main_repo) == expected
+
+###
+###     HELPERS
+###
 
 class DefaultFolders:
     def __init__(self, tmp_path: Path):
@@ -393,11 +438,11 @@ def install_hook(repo: Path):
     hook_path = Path(__file__).parent.parent / 'prepare-commit-msg'
 
     shutil.copy(hook_path, hooks_dir)
-    do_command('chmod', '+x', hooks_dir / 'prepare-commit-msg', config={})
+    do_command('chmod', '+x', hooks_dir / 'prepare-commit-msg')
 
 
-def do_command(*command: Union[str, Path], config: Dict) -> List[str]:
-    result = run(command, capture_output=True, env={i: str(config[i]) for i in config})
+def do_command(*command: Union[str, Path]) -> List[str]:
+    result = run(command, capture_output=True)
     result.check_returncode()
     return result.stdout.decode().strip().splitlines()
 
@@ -406,11 +451,17 @@ def get_last_commit_message(repo: Path) -> List[str]:
     return do_git_command(repo, 'log', '--format=%B', '-n', '1', 'HEAD', config={})
 
 
-def do_git_command(repo: Path, *options: str, config: Dict = {}) -> List[str]:
+def do_git_command(repo: Path, *options: str, config: Optional[Dict[str, str]] = None) -> List[str]:
     command = ['git', '-C', repo]
+
+    if config:
+        for key, val in config.items():
+            command.append("-c")
+            command.append(f"{key}={val}")
+
     command.extend(options)
 
-    return do_command(*command, config=config)
+    return do_command(*command)
 
 
 def stage_files(repo: Path, *to_stage: Path):
@@ -422,7 +473,8 @@ def add_submodule_to_repo(repo: Path, submodule_path: Path, name: str) -> Path:
     # https://bugs.launchpad.net/ubuntu/+source/git/+bug/1993586/comments/5
     # git dont like adding local submodules anymore. Hence the need to modify config fore this
 
-    run(['git', '-C', repo, '-c', 'protocol.file.allow=always', 'submodule', 'add', '--branch', 'master', submodule_path, name]).check_returncode()
+    run(['git', '-C', repo, '-c', 'protocol.file.allow=always', 'submodule', 'add', '--branch', 'master',
+         submodule_path, name]).check_returncode()
     return repo / name
 
 

@@ -7,35 +7,79 @@
 #
 from dataclasses import dataclass
 from pathlib import Path
-
 from subprocess import run, CalledProcessError
 from typing import List, Tuple
 import sys
 import os
 
-commit_hash_length = int(os.environ.get("SUBMODULE_HOOK_HASH_LENGTH", default=8))
-max_commits = int(os.environ.get("SUBMODULE_HOOK_MAX_COMMIT_SHOWN", default=12))
-debug_env_variable = "SUBMODULE_HOOK_DEBUG"
-is_debug = debug_env_variable in os.environ
+CONFIG_HASH_LENGTH = "hooks.submodule-commit-msg.hash-length"
+CONFIG_MAX_COMMITS_LISTED = "hooks.submodule-commit-msg.max-commits-listed"
+CONFIG_ENABLED = "hooks.submodule-commit-msg.enabled"
+CONFIG_DEBUG = "hooks.submodule-commit-msg.debug"
+
+CONFIG_DEFAULT_HASH_LENGTH = 8
+CONFIG_DEFAULT_MAX_COMMITS_LISTED = 12
 
 
-def do_git_command_single_line(*args) -> str:
-    lines = do_git_command_multi_line(*args)
+def do_git_command_single_line(*args, ok_status_codes: List[int] = []) -> str:
+    lines = do_git_command_multi_line(*args, ok_status_codes=ok_status_codes)
     if len(lines) > 0:
         return lines[0]
     else:
         return ""
 
 
-def do_git_command_multi_line(*args) -> List[str]:
+def do_git_command_multi_line(*args, ok_status_codes: List[int] = []) -> List[str]:
     process_result = run(["git"] + [str(arg) for arg in args], capture_output=True)
-    process_result.check_returncode()
+    if not ok_status_codes:
+        process_result.check_returncode()
+    else:
+        if process_result.returncode not in ok_status_codes:
+            raise CalledProcessError(process_result.returncode, process_result.args, process_result.stdout,
+                                     process_result.stderr)
+
     raw_output = process_result.stdout.decode()
     result = [i.strip() for i in raw_output.splitlines()]
     return result
 
 
 repo_root = Path(do_git_command_single_line("rev-parse", "--show-toplevel"))
+
+
+def get_config_hash_length() -> int:
+    config_value = do_git_command_single_line("-C", repo_root, "config", "--type", "int", CONFIG_HASH_LENGTH,
+                                              ok_status_codes=[0, 1])
+    if not config_value:
+        return CONFIG_DEFAULT_HASH_LENGTH
+    try:
+        return int(config_value)
+    except Exception as e:
+        fail(f"Value {config_value!r} is not valid for config {CONFIG_HASH_LENGTH}")
+
+
+def get_config_max_shown() -> int:
+    config_value = do_git_command_single_line("-C", repo_root, "config", "--type", "int", CONFIG_MAX_COMMITS_LISTED,
+                                              ok_status_codes=[0, 1])
+    if not config_value:
+        return CONFIG_DEFAULT_MAX_COMMITS_LISTED
+    try:
+        return int(config_value)
+    except Exception as e:
+        fail(f"Value {config_value!r} is not valid for config {CONFIG_MAX_COMMITS_LISTED}")
+
+
+def is_debug() -> bool:
+    return do_git_command_single_line("-C", repo_root, "config", "--type", "bool", CONFIG_DEBUG,
+                                      ok_status_codes=[0, 1]) == "true"
+
+
+def is_enabled() -> bool:
+    value = do_git_command_single_line("-C", repo_root, "config", "--type", "bool", CONFIG_ENABLED,
+                                       ok_status_codes=[0, 1])
+    print(repr(value))
+    if not value:
+        return True
+    return value == "true"
 
 
 @dataclass(frozen=True)
@@ -119,7 +163,10 @@ def format_submodule_staged_commits(module_name: str, module_path: str, compare_
     if head == staged:
         return []
 
-    max_commits_to_extract = max_commits + 1
+    max_commits_shown = get_config_max_shown()
+    hash_length = get_config_hash_length()
+
+    max_commits_to_extract = max_commits_shown + 1
     commits = do_git_command_multi_line('-C', repo_root / module_path, 'log', '--pretty=oneline', '-n',
                                         max_commits_to_extract,
                                         f"{head}..{staged}")
@@ -130,21 +177,21 @@ def format_submodule_staged_commits(module_name: str, module_path: str, compare_
         # Regression...
         downgrade_to = do_git_command_single_line('-C', repo_root / module_path, 'log', '-n', '1', '--format=%s',
                                                   staged)
-        result.append(f"    Downgrade to: {staged[:commit_hash_length]} {downgrade_to}")
+        result.append(f"    Downgrade to: {staged[:hash_length]} {downgrade_to}")
 
-    for line in commits[:max_commits]:
+    for line in commits[:max_commits_shown]:
         splitted = line.split(' ')
 
         # only use specified length for commit-hash
-        commit_hash = splitted[0][:commit_hash_length]
+        commit_hash = splitted[0][:hash_length]
         commit_msg = ' '.join(splitted[1:])
         result.append(f'    {commit_hash} {commit_msg}')
 
-    if len(commits) > max_commits:
+    if len(commits) > max_commits_shown:
         # if truncated
         total_commits = do_git_command_single_line('-C', repo_root / module_path, 'rev-list', '--count',
                                                    f"{head}..{staged}")
-        not_shown_commits = int(total_commits) - max_commits
+        not_shown_commits = int(total_commits) - max_commits_shown
         result.append(f'    ... +{not_shown_commits} more')
 
     return result
@@ -251,11 +298,10 @@ def apply_changes(filename: str, compare_commit: str):
 
 
 def fail(message: str):
-    if is_debug:
+    if is_debug():
         raise ValueError(message)
     else:
-        print(f"Submodule-list-changes-hook encountered an error: {message}")
-        print(f"To get full traceback set the environment variable {debug_env_variable}")
+        print(f"Error in Submodule-list-changes-hook: {message}")
         sys.exit(0)
 
 
@@ -288,13 +334,18 @@ def main():
         else:
             fail(f"Unknown commit-type option {commit_type}")
 
+    if not is_enabled():
+        print("Submodule-list-changes-hook is disabled")
+        sys.exit(0)
+
     try:
         apply_changes(existing_commit_msg_path, prev_commit_source)
     except Exception as e:
-        if is_debug:
+        if is_debug():
             raise e
         else:
             fail(str(e))
+
 
 if __name__ == '__main__':
     main()
