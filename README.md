@@ -51,7 +51,7 @@ longer work. All hooks need to be in this folder. `git config --global core.hook
 
 The hook can be configured to by setting the following settings in `git config`
 
-| Environment variable                            | Default | Description                                                       |
+| Key                                             | Default | Description                                                       |
 |-------------------------------------------------|---------|-------------------------------------------------------------------|
 | `hooks.submodule-commit-msg.hash-length`        | 8       | Include the first n letters of each submodule commit hash         |
 | `hooks.submodule-commit-msg.max-commits-listed` | 12      | Max amount of commits listed per submodule before truncating list |
